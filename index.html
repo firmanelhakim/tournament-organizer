@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Round Robin Tournament Organizer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .fade-in {
+            animation: fadeIn 0.5s ease-in-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800">
+
+    <div class="container mx-auto p-4 sm:p-6 md:p-8 max-w-4xl">
+        <header class="text-center mb-8">
+            <h1 class="text-3xl sm:text-4xl font-bold text-gray-900">🏆 Tournament Mixer</h1>
+            <p class="text-gray-600 mt-2">Rotating Partner Round Robin Scheduler & Scorekeeper</p>
+        </header>
+
+        <!-- Setup Section -->
+        <div id="setup-section" class="bg-white p-6 rounded-2xl shadow-lg mb-8">
+            <h2 class="text-2xl font-semibold mb-6 border-b pb-3">Event Setup</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    <label for="num-players" class="block text-sm font-medium text-gray-700 mb-1">Number of Players</label>
+                    <input type="number" id="num-players" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" placeholder="e.g., 16">
+                </div>
+                <div>
+                    <label for="num-courts" class="block text-sm font-medium text-gray-700 mb-1">Number of Courts</label>
+                    <input type="number" id="num-courts" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" placeholder="e.g., 4">
+                </div>
+                <div class="md:col-span-2">
+                    <label for="player-names" class="block text-sm font-medium text-gray-700 mb-1">Player Names (one per line)</label>
+                    <textarea id="player-names" rows="8" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" placeholder="Alice&#10;Bob&#10;Charlie&#10;Diana"></textarea>
+                </div>
+            </div>
+            <button id="generate-tournament" class="mt-6 w-full bg-indigo-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-4 focus:ring-indigo-500 focus:ring-opacity-50 transition-transform transform hover:scale-105">
+                Generate Tournament
+            </button>
+            <div id="error-message" class="mt-4 text-red-600 text-center font-medium"></div>
+        </div>
+
+        <!-- Display Section (Initially Hidden) -->
+        <div id="display-section" class="hidden">
+            <!-- Schedule Area -->
+            <div id="schedule-area" class="bg-white p-6 rounded-2xl shadow-lg mb-8">
+                <h2 class="text-2xl font-semibold mb-4 text-center">Tournament Schedule</h2>
+                <div id="schedule-container" class="space-y-6"></div>
+            </div>
+
+            <!-- Leaderboard Area -->
+            <div id="leaderboard-area" class="bg-white p-6 rounded-2xl shadow-lg">
+                <h2 class="text-2xl font-semibold mb-4 text-center">Leaderboard</h2>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rank</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Player</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Wins</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Losses</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Points</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">PF</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">PA</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Point Diff.</th>
+                            </tr>
+                        </thead>
+                        <tbody id="leaderboard-body" class="bg-white divide-y divide-gray-200">
+                            <!-- Leaderboard rows will be inserted here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- Global State ---
+        let players = [];
+        let schedule = [];
+
+        // --- DOM Elements ---
+        const generateBtn = document.getElementById('generate-tournament');
+        const displaySection = document.getElementById('display-section');
+        const setupSection = document.getElementById('setup-section');
+        const errorMessage = document.getElementById('error-message');
+        const scheduleContainer = document.getElementById('schedule-container');
+        const leaderboardBody = document.getElementById('leaderboard-body');
+
+        // --- Event Listeners ---
+        generateBtn.addEventListener('click', handleGenerateTournament);
+
+        // --- Core Functions ---
+
+        /**
+         * Handles the "Generate Tournament" button click.
+         * Validates input, generates schedule and leaderboard.
+         */
+        function handleGenerateTournament() {
+            // 1. Get User Input
+            const numPlayers = parseInt(document.getElementById('num-players').value);
+            const numCourts = parseInt(document.getElementById('num-courts').value);
+            const playerNamesRaw = document.getElementById('player-names').value.trim();
+            const playerNames = playerNamesRaw.split('\n').filter(name => name.trim() !== '');
+
+            // 2. Validate Input
+            errorMessage.textContent = '';
+            if (isNaN(numPlayers) || isNaN(numCourts) || playerNames.length === 0) {
+                errorMessage.textContent = 'Please fill in all fields.';
+                return;
+            }
+            if (numPlayers !== playerNames.length) {
+                errorMessage.textContent = `Number of Players (${numPlayers}) does not match the number of names entered (${playerNames.length}).`;
+                return;
+            }
+            if (numPlayers % 4 !== 0) {
+                errorMessage.textContent = 'Number of Players must be a multiple of 4 for doubles.';
+                return;
+            }
+            if (numCourts * 4 > numPlayers) {
+                errorMessage.textContent = 'There are more court slots than players.';
+                return;
+            }
+
+            // 3. Initialize Player Data
+            players = playerNames.map(name => ({
+                name: name.trim(),
+                wins: 0,
+                losses: 0,
+                totalPoints: 0,
+                pointsFor: 0,
+                pointsAgainst: 0,
+            }));
+
+            // 4. Generate Schedule
+            generateSchedule(numPlayers, numCourts);
+
+            // 5. Render UI
+            renderSchedule();
+            renderLeaderboard();
+            displaySection.classList.remove('hidden');
+            displaySection.classList.add('fade-in');
+            setupSection.classList.add('hidden');
+        }
+
+        /**
+         * Generates the tournament schedule using the "Split and Rotate" logic.
+         * @param {number} numPlayers - The total number of players.
+         * @param {number} numCourts - The number of courts available.
+         */
+        function generateSchedule(numPlayers, numCourts) {
+            // Shuffle players for random initial positioning
+            let shuffledPlayers = [...players].sort(() => Math.random() - 0.5);
+
+            // Split players into two groups
+            const half = numPlayers / 2;
+            let groupA = shuffledPlayers.slice(0, half);
+            let groupB = shuffledPlayers.slice(half);
+            
+            const numRounds = 7; // A common number for mixers
+            schedule = [];
+
+            for (let round = 0; round < numRounds; round++) {
+                let roundMatches = [];
+                for (let i = 0; i < half; i++) {
+                    // Pair players from Group A and Group B
+                    const player1 = groupA[i];
+                    const player2 = groupB[i];
+                    
+                    // The opponents are the next pair in the list (wrapping around)
+                    const opponent1 = groupA[(i + 1) % half];
+                    const opponent2 = groupB[(i + 1) % half];
+
+                    // To avoid duplicate matches in a round, we only create a match for every other pairing
+                    if (i % 2 === 0) {
+                         roundMatches.push({
+                            round: round + 1,
+                            court: (roundMatches.length % numCourts) + 1,
+                            team1: [player1, player2],
+                            team2: [opponent1, opponent2],
+                            score1: null,
+                            score2: null,
+                            submitted: false
+                        });
+                    }
+                }
+                schedule.push(roundMatches);
+
+                // Rotate Group B: first player moves to the end
+                groupB.push(groupB.shift());
+            }
+        }
+
+        /**
+         * Renders the generated schedule to the DOM.
+         */
+        function renderSchedule() {
+            scheduleContainer.innerHTML = '';
+            schedule.forEach((roundMatches, roundIndex) => {
+                const roundDiv = document.createElement('div');
+                roundDiv.className = 'fade-in';
+                
+                const roundTitle = document.createElement('h3');
+                roundTitle.className = 'text-xl font-semibold mb-4 bg-gray-100 p-3 rounded-lg';
+                roundTitle.textContent = `Round ${roundIndex + 1}`;
+                roundDiv.appendChild(roundTitle);
+
+                const matchesGrid = document.createElement('div');
+                matchesGrid.className = 'grid grid-cols-1 lg:grid-cols-2 gap-4';
+                
+                roundMatches.forEach((match, matchIndex) => {
+                    const matchCard = document.createElement('div');
+                    matchCard.className = 'p-4 border rounded-lg bg-white shadow-sm';
+                    
+                    const courtTitle = document.createElement('p');
+                    courtTitle.className = 'font-bold text-center text-gray-700 mb-2';
+                    courtTitle.textContent = `Court ${match.court}`;
+                    
+                    const teamsDiv = document.createElement('div');
+                    teamsDiv.className = 'flex items-center justify-center space-x-2 text-center';
+                    
+                    teamsDiv.innerHTML = `
+                        <div class="flex-1">
+                            <p class="font-medium">${match.team1[0].name}</p>
+                            <p class="font-medium">& ${match.team1[1].name}</p>
+                        </div>
+                        <span class="text-gray-400 font-bold">vs</span>
+                        <div class="flex-1">
+                            <p class="font-medium">${match.team2[0].name}</p>
+                            <p class="font-medium">& ${match.team2[1].name}</p>
+                        </div>
+                    `;
+                    
+                    const scoreDiv = document.createElement('div');
+                    scoreDiv.id = `score-input-${roundIndex}-${matchIndex}`;
+                    scoreDiv.className = 'mt-3 flex items-center justify-center space-x-2';
+
+                    if (match.submitted) {
+                        scoreDiv.innerHTML = `<p class="font-bold text-lg">${match.score1} - ${match.score2}</p>`;
+                    } else {
+                        scoreDiv.innerHTML = `
+                            <input type="number" class="w-16 p-2 text-center border rounded-md" placeholder="S1">
+                            <span class="font-bold">-</span>
+                            <input type="number" class="w-16 p-2 text-center border rounded-md" placeholder="S2">
+                            <button class="bg-green-500 text-white text-sm font-bold py-2 px-3 rounded-md hover:bg-green-600">Submit</button>
+                        `;
+                        scoreDiv.querySelector('button').addEventListener('click', () => {
+                            const scores = scoreDiv.querySelectorAll('input');
+                            const score1 = parseInt(scores[0].value);
+                            const score2 = parseInt(scores[1].value);
+                            handleSubmitScore(roundIndex, matchIndex, score1, score2);
+                        });
+                    }
+                    
+                    matchCard.appendChild(courtTitle);
+                    matchCard.appendChild(teamsDiv);
+                    matchCard.appendChild(scoreDiv);
+                    matchesGrid.appendChild(matchCard);
+                });
+
+                roundDiv.appendChild(matchesGrid);
+                scheduleContainer.appendChild(roundDiv);
+            });
+        }
+
+        /**
+         * Handles score submission for a match.
+         * @param {number} roundIndex - The index of the round.
+         * @param {number} matchIndex - The index of the match within the round.
+         * @param {number} score1 - The score for team 1.
+         * @param {number} score2 - The score for team 2.
+         */
+        function handleSubmitScore(roundIndex, matchIndex, score1, score2) {
+            if (isNaN(score1) || isNaN(score2)) {
+                alert('Please enter valid scores for both teams.');
+                return;
+            }
+
+            const match = schedule[roundIndex][matchIndex];
+            
+            // Update match data
+            match.score1 = score1;
+            match.score2 = score2;
+            match.submitted = true;
+
+            // Determine winner and loser
+            const team1Won = score1 > score2;
+            const winners = team1Won ? match.team1 : match.team2;
+            const losers = team1Won ? match.team2 : match.team1;
+
+            // Update player stats
+            winners.forEach(player => {
+                const p = players.find(p => p.name === player.name);
+                p.wins++;
+                p.totalPoints += 2;
+                p.pointsFor += team1Won ? score1 : score2;
+                p.pointsAgainst += team1Won ? score2 : score1;
+            });
+
+            losers.forEach(player => {
+                const p = players.find(p => p.name === player.name);
+                p.losses++;
+                p.pointsFor += team1Won ? score2 : score1;
+                p.pointsAgainst += team1Won ? score1 : score2;
+            });
+            
+            // Re-render the specific score input area
+            const scoreDiv = document.getElementById(`score-input-${roundIndex}-${matchIndex}`);
+            scoreDiv.innerHTML = `<p class="font-bold text-lg text-indigo-600">${score1} - ${score2}</p>`;
+
+            // Re-render the leaderboard
+            renderLeaderboard();
+        }
+
+        /**
+         * Renders the leaderboard, sorting players by points and then point differential.
+         */
+        function renderLeaderboard() {
+            // Sort players
+            const sortedPlayers = [...players].sort((a, b) => {
+                // Primary sort: Total Points (descending)
+                if (b.totalPoints !== a.totalPoints) {
+                    return b.totalPoints - a.totalPoints;
+                }
+                // Secondary sort: Point Differential (descending)
+                const diffA = a.pointsFor - a.pointsAgainst;
+                const diffB = b.pointsFor - b.pointsAgainst;
+                if (diffB !== diffA) {
+                    return diffB - diffA;
+                }
+                // Tertiary sort: Points For (descending)
+                return b.pointsFor - a.pointsFor;
+            });
+
+            // Render table
+            leaderboardBody.innerHTML = '';
+            sortedPlayers.forEach((player, index) => {
+                const row = leaderboardBody.insertRow();
+                row.className = 'fade-in';
+                const pointDiff = player.pointsFor - player.pointsAgainst;
+
+                row.innerHTML = `
+                    <td class="px-4 py-3 whitespace-nowrap font-bold">${index + 1}</td>
+                    <td class="px-4 py-3 whitespace-nowrap font-medium text-gray-900">${player.name}</td>
+                    <td class="px-4 py-3 whitespace-nowrap text-green-600 font-semibold">${player.wins}</td>
+                    <td class="px-4 py-3 whitespace-nowrap text-red-600 font-semibold">${player.losses}</td>
+                    <td class="px-4 py-3 whitespace-nowrap font-bold text-indigo-600">${player.totalPoints}</td>
+                    <td class="px-4 py-3 whitespace-nowrap">${player.pointsFor}</td>
+                    <td class="px-4 py-3 whitespace-nowrap">${player.pointsAgainst}</td>
+                    <td class="px-4 py-3 whitespace-nowrap font-semibold ${pointDiff >= 0 ? 'text-blue-600' : 'text-orange-600'}">
+                        ${pointDiff > 0 ? '+' : ''}${pointDiff}
+                    </td>
+                `;
+            });
+        }
+    </script>
+
+</body>
+</html>
