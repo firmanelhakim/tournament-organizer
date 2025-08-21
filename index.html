@@ -154,50 +154,57 @@
         }
 
         /**
-         * Generates the tournament schedule using the "Split and Rotate" logic.
+         * Generates the tournament schedule using a round-robin algorithm.
+         * This "fix one, rotate the rest" method ensures maximum partner variety.
          * @param {number} numPlayers - The total number of players.
          * @param {number} numCourts - The number of courts available.
          */
         function generateSchedule(numPlayers, numCourts) {
             // Shuffle players for random initial positioning
-            let shuffledPlayers = [...players].sort(() => Math.random() - 0.5);
+            let rotatingPlayers = [...players].sort(() => Math.random() - 0.5);
 
-            // Split players into two groups
-            const half = numPlayers / 2;
-            let groupA = shuffledPlayers.slice(0, half);
-            let groupB = shuffledPlayers.slice(half);
+            // The first player is fixed to ensure a proper round-robin rotation
+            const fixedPlayer = rotatingPlayers.shift();
             
-            const numRounds = 7; // A common number for mixers
+            // A full partner round-robin requires N-1 rounds for N players
+            const numRounds = numPlayers - 1; 
             schedule = [];
 
             for (let round = 0; round < numRounds; round++) {
                 let roundMatches = [];
-                for (let i = 0; i < half; i++) {
-                    // Pair players from Group A and Group B
-                    const player1 = groupA[i];
-                    const player2 = groupB[i];
-                    
-                    // The opponents are the next pair in the list (wrapping around)
-                    const opponent1 = groupA[(i + 1) % half];
-                    const opponent2 = groupB[(i + 1) % half];
-
-                    // To avoid duplicate matches in a round, we only create a match for every other pairing
-                    if (i % 2 === 0) {
-                         roundMatches.push({
+                
+                // The list of players for this round's pairings
+                let currentRoundPlayers = [fixedPlayer, ...rotatingPlayers];
+                
+                // Create pairs by taking from the start and end of the list
+                let pairs = [];
+                for (let i = 0; i < numPlayers / 2; i++) {
+                    pairs.push([currentRoundPlayers[i], currentRoundPlayers[numPlayers - 1 - i]]);
+                }
+                
+                // Create matches from the generated pairs
+                let matchesMadeInRound = 0;
+                for (let j = 0; j < pairs.length; j += 2) {
+                    // Ensure there's an opposing pair for a match
+                    if (pairs[j+1]) { 
+                        roundMatches.push({
                             round: round + 1,
-                            court: (roundMatches.length % numCourts) + 1,
-                            team1: [player1, player2],
-                            team2: [opponent1, opponent2],
+                            court: (matchesMadeInRound % numCourts) + 1,
+                            team1: pairs[j],
+                            team2: pairs[j+1],
                             score1: null,
                             score2: null,
                             submitted: false
                         });
+                        matchesMadeInRound++;
                     }
                 }
+                
                 schedule.push(roundMatches);
 
-                // Rotate Group B: first player moves to the end
-                groupB.push(groupB.shift());
+                // Rotate the players (except the fixed one) for the next round
+                // The last player moves to the front of the rotating list
+                rotatingPlayers.unshift(rotatingPlayers.pop());
             }
         }
 
