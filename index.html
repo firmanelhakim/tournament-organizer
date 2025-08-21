@@ -30,7 +30,7 @@
         <!-- Setup Section -->
         <div id="setup-section" class="bg-white p-6 rounded-2xl shadow-lg mb-8">
             <h2 class="text-2xl font-semibold mb-6 border-b pb-3">Event Setup</h2>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div>
                     <label for="num-players" class="block text-sm font-medium text-gray-700 mb-1">Number of Players</label>
                     <input type="number" id="num-players" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" placeholder="e.g., 16">
@@ -39,7 +39,11 @@
                     <label for="num-courts" class="block text-sm font-medium text-gray-700 mb-1">Number of Courts</label>
                     <input type="number" id="num-courts" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" placeholder="e.g., 4">
                 </div>
-                <div class="md:col-span-2">
+                 <div>
+                    <label for="num-rounds" class="block text-sm font-medium text-gray-700 mb-1">Rounds to Play</label>
+                    <input type="number" id="num-rounds" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" placeholder="e.g., 7">
+                </div>
+                <div class="md:col-span-3">
                     <label for="player-names" class="block text-sm font-medium text-gray-700 mb-1">Player Names (one per line)</label>
                     <textarea id="player-names" rows="8" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" placeholder="Alice&#10;Bob&#10;Charlie&#10;Diana"></textarea>
                 </div>
@@ -90,6 +94,8 @@
         let schedule = [];
 
         // --- DOM Elements ---
+        const numPlayersInput = document.getElementById('num-players');
+        const numRoundsInput = document.getElementById('num-rounds');
         const generateBtn = document.getElementById('generate-tournament');
         const displaySection = document.getElementById('display-section');
         const setupSection = document.getElementById('setup-section');
@@ -99,36 +105,40 @@
 
         // --- Event Listeners ---
         generateBtn.addEventListener('click', handleGenerateTournament);
+        numPlayersInput.addEventListener('input', () => {
+            const numPlayers = parseInt(numPlayersInput.value);
+            if (!isNaN(numPlayers) && numPlayers > 0) {
+                numRoundsInput.placeholder = `e.g., ${numPlayers - 1}`;
+            } else {
+                numRoundsInput.placeholder = `e.g., 7`;
+            }
+        });
 
         // --- Core Functions ---
 
-        /**
-         * Handles the "Generate Tournament" button click.
-         * Validates input, generates schedule and leaderboard.
-         */
         function handleGenerateTournament() {
             // 1. Get User Input
             const numPlayers = parseInt(document.getElementById('num-players').value);
             const numCourts = parseInt(document.getElementById('num-courts').value);
+            let numRounds = parseInt(document.getElementById('num-rounds').value);
             const playerNamesRaw = document.getElementById('player-names').value.trim();
             const playerNames = playerNamesRaw.split('\n').filter(name => name.trim() !== '');
 
             // 2. Validate Input
             errorMessage.textContent = '';
             if (isNaN(numPlayers) || isNaN(numCourts) || playerNames.length === 0) {
-                errorMessage.textContent = 'Please fill in all fields.';
+                errorMessage.textContent = 'Please fill in Players, Courts, and Names.';
                 return;
+            }
+            if (isNaN(numRounds) || numRounds <= 0) {
+                numRounds = numPlayers - 1;
             }
             if (numPlayers !== playerNames.length) {
                 errorMessage.textContent = `Number of Players (${numPlayers}) does not match the number of names entered (${playerNames.length}).`;
                 return;
             }
-            if (numPlayers % 4 !== 0) {
-                errorMessage.textContent = 'Number of Players must be a multiple of 4 for doubles.';
-                return;
-            }
-            if (numCourts * 4 > numPlayers) {
-                errorMessage.textContent = 'There are more court slots than players.';
+            if (numPlayers % 2 !== 0) {
+                errorMessage.textContent = 'Number of Players must be an even number for doubles.';
                 return;
             }
 
@@ -143,7 +153,7 @@
             }));
 
             // 4. Generate Schedule
-            generateSchedule(numPlayers, numCourts);
+            generateSchedule(numPlayers, numCourts, numRounds);
 
             // 5. Render UI
             renderSchedule();
@@ -154,66 +164,58 @@
         }
 
         /**
-         * Generates the tournament schedule using a round-robin algorithm.
-         * This "fix one, rotate the rest" method ensures maximum partner variety.
+         * Generates the tournament schedule, handling "byes" if players are not a multiple of 4.
          * @param {number} numPlayers - The total number of players.
          * @param {number} numCourts - The number of courts available.
+         * @param {number} numRounds - The number of rounds to generate.
          */
-        function generateSchedule(numPlayers, numCourts) {
-            // Shuffle players for random initial positioning
+        function generateSchedule(numPlayers, numCourts, numRounds) {
             let rotatingPlayers = [...players].sort(() => Math.random() - 0.5);
-
-            // The first player is fixed to ensure a proper round-robin rotation
             const fixedPlayer = rotatingPlayers.shift();
-            
-            // A full partner round-robin requires N-1 rounds for N players
-            const numRounds = numPlayers - 1; 
             schedule = [];
 
             for (let round = 0; round < numRounds; round++) {
-                let roundMatches = [];
-                
-                // The list of players for this round's pairings
                 let currentRoundPlayers = [fixedPlayer, ...rotatingPlayers];
-                
-                // Create pairs by taking from the start and end of the list
                 let pairs = [];
                 for (let i = 0; i < numPlayers / 2; i++) {
                     pairs.push([currentRoundPlayers[i], currentRoundPlayers[numPlayers - 1 - i]]);
                 }
-                
-                // Create matches from the generated pairs
+
+                let roundMatches = [];
+                let byePlayers = [];
                 let matchesMadeInRound = 0;
+
                 for (let j = 0; j < pairs.length; j += 2) {
-                    // Ensure there's an opposing pair for a match
-                    if (pairs[j+1]) { 
+                    if (pairs[j + 1]) { // If there's an opposing pair for a match
                         roundMatches.push({
                             round: round + 1,
                             court: (matchesMadeInRound % numCourts) + 1,
                             team1: pairs[j],
-                            team2: pairs[j+1],
+                            team2: pairs[j + 1],
                             score1: null,
                             score2: null,
                             submitted: false
                         });
                         matchesMadeInRound++;
+                    } else { // This is the leftover pair, they are on a bye
+                        byePlayers = pairs[j];
                     }
                 }
                 
-                schedule.push(roundMatches);
+                // Store the round data, including matches and byes
+                schedule.push({ matches: roundMatches, byes: byePlayers });
 
-                // Rotate the players (except the fixed one) for the next round
-                // The last player moves to the front of the rotating list
+                // Rotate players for the next round
                 rotatingPlayers.unshift(rotatingPlayers.pop());
             }
         }
 
         /**
-         * Renders the generated schedule to the DOM.
+         * Renders the generated schedule to the DOM, including bye information.
          */
         function renderSchedule() {
             scheduleContainer.innerHTML = '';
-            schedule.forEach((roundMatches, roundIndex) => {
+            schedule.forEach((roundData, roundIndex) => {
                 const roundDiv = document.createElement('div');
                 roundDiv.className = 'fade-in';
                 
@@ -225,7 +227,7 @@
                 const matchesGrid = document.createElement('div');
                 matchesGrid.className = 'grid grid-cols-1 lg:grid-cols-2 gap-4';
                 
-                roundMatches.forEach((match, matchIndex) => {
+                roundData.matches.forEach((match, matchIndex) => {
                     const matchCard = document.createElement('div');
                     matchCard.className = 'p-4 border rounded-lg bg-white shadow-sm';
                     
@@ -276,16 +278,21 @@
                 });
 
                 roundDiv.appendChild(matchesGrid);
+
+                // Display players on a bye for this round
+                if (roundData.byes.length > 0) {
+                    const byeDiv = document.createElement('div');
+                    byeDiv.className = 'mt-4 p-3 bg-blue-50 border-l-4 border-blue-400 rounded-r-lg';
+                    byeDiv.innerHTML = `<p class="text-sm text-blue-800"><span class="font-bold">On a Bye:</span> ${roundData.byes[0].name} & ${roundData.byes[1].name}</p>`;
+                    roundDiv.appendChild(byeDiv);
+                }
+
                 scheduleContainer.appendChild(roundDiv);
             });
         }
 
         /**
          * Handles score submission for a match.
-         * @param {number} roundIndex - The index of the round.
-         * @param {number} matchIndex - The index of the match within the round.
-         * @param {number} score1 - The score for team 1.
-         * @param {number} score2 - The score for team 2.
          */
         function handleSubmitScore(roundIndex, matchIndex, score1, score2) {
             if (isNaN(score1) || isNaN(score2)) {
@@ -293,19 +300,17 @@
                 return;
             }
 
-            const match = schedule[roundIndex][matchIndex];
+            // Access the match from the updated schedule structure
+            const match = schedule[roundIndex].matches[matchIndex];
             
-            // Update match data
             match.score1 = score1;
             match.score2 = score2;
             match.submitted = true;
 
-            // Determine winner and loser
             const team1Won = score1 > score2;
             const winners = team1Won ? match.team1 : match.team2;
             const losers = team1Won ? match.team2 : match.team1;
 
-            // Update player stats
             winners.forEach(player => {
                 const p = players.find(p => p.name === player.name);
                 p.wins++;
@@ -321,11 +326,9 @@
                 p.pointsAgainst += team1Won ? score1 : score2;
             });
             
-            // Re-render the specific score input area
             const scoreDiv = document.getElementById(`score-input-${roundIndex}-${matchIndex}`);
             scoreDiv.innerHTML = `<p class="font-bold text-lg text-indigo-600">${score1} - ${score2}</p>`;
 
-            // Re-render the leaderboard
             renderLeaderboard();
         }
 
@@ -333,23 +336,18 @@
          * Renders the leaderboard, sorting players by points and then point differential.
          */
         function renderLeaderboard() {
-            // Sort players
             const sortedPlayers = [...players].sort((a, b) => {
-                // Primary sort: Total Points (descending)
                 if (b.totalPoints !== a.totalPoints) {
                     return b.totalPoints - a.totalPoints;
                 }
-                // Secondary sort: Point Differential (descending)
                 const diffA = a.pointsFor - a.pointsAgainst;
                 const diffB = b.pointsFor - b.pointsAgainst;
                 if (diffB !== diffA) {
                     return diffB - diffA;
                 }
-                // Tertiary sort: Points For (descending)
-                return b.pointsFor - a.pointsFor;
+                return b.pointsFor - a.pointsAgainst;
             });
 
-            // Render table
             leaderboardBody.innerHTML = '';
             sortedPlayers.forEach((player, index) => {
                 const row = leaderboardBody.insertRow();
